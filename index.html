@@ -1,107 +1,80 @@
-<script>
-/* ... keep everything above as-is ... */
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Migration Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  </head>
+  <body class="bg-gray-50">
+    <div class="max-w-6xl mx-auto p-6">
+      <h1 class="text-2xl font-bold mb-4">Migration Dashboard</h1>
 
-renderSubsectionsView() {
-  const filteredData = this.data.filter(row =>
-    row.GOAL === this.selectedGoal &&
-    row['SERVICE TYPE'] === this.selectedService &&
-    row.SECTION === this.selectedSection
-  );
-
-  const subsections = this.groupBy(filteredData, 'SUBSECTION');
-
-  let html = `
-    <div class="flex items-center mb-6">
-      <button onclick="DashboardApp.goBack()" class="mr-4 p-2 hover:bg-gray-100 rounded-lg transition-colors">
-        <i data-lucide="arrow-left" class="w-5 h-5"></i>
-      </button>
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">
-          ${this.selectedGoal} - ${this.selectedService} - ${this.selectedSection}
-        </h1>
-        <p class="text-gray-600">Detailed task breakdown</p>
+      <div id="status" class="mb-4 text-gray-700">
+        <span class="inline-flex items-center gap-2">
+          <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+          Loading CSV…
+        </span>
       </div>
+
+      <div id="error" class="hidden p-4 rounded-lg bg-red-50 text-red-700 border border-red-200"></div>
+      <div id="table" class="overflow-auto rounded-lg shadow bg-white hidden"></div>
     </div>
-    <div class="space-y-4">
-  `;
 
-  Object.entries(subsections).forEach(([subsectionName, tasks]) => {
-    const hasSubtasks = tasks.some(t => t['SUBSECTION TASK'] && t['SUBSECTION TASK'].trim() !== '');
-    const isExpanded = !!this.expandedSubsections[subsectionName];
-    const completed = tasks.filter(t => t.STATUS === 'Complete').length;
-    const total = tasks.length;
-    const percentage = total ? Math.round((completed / total) * 100) : 0;
+    <script>
+      (async function () {
+        const CSV_FILE = "migration-update-dashboard.csv"; // matches your renamed file
 
-    if (!hasSubtasks && tasks.length === 1) {
-      const task = tasks[0];
-      html += `
-        <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 hover:bg-gray-50 transition-colors">
-          <div class="flex items-center justify-between">
-            <div class="flex-1">
-              <h3 class="text-base font-medium text-gray-900">${subsectionName}</h3>
-              <div class="flex flex-wrap gap-2 mt-2">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getItemStatusColor(task.STATUS)}">
-                  ${task.STATUS}
-                </span>
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getImpactColor(task['MIGRATION IMPACT'])}">
-                  ${task['MIGRATION IMPACT']}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-    } else {
-      html += `
-        <div class="bg-white rounded-lg border border-gray-200 shadow-sm">
-          <div class="p-4 border-b border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
-               onclick="DashboardApp.toggleSubsection('${subsectionName.replace(/'/g, "\\'")}')">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <i data-lucide="chevron-right" class="w-5 h-5 text-gray-500 transition-transform ${isExpanded ? 'rotate-90' : ''}"></i>
-                <h3 class="text-lg font-semibold text-gray-900">${subsectionName}</h3>
-              </div>
-              <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2">
-                  <div class="w-32 bg-gray-2 00 rounded-full h-2 overflow-hidden">
-                    <div class="h-2 rounded-full ${this.getProgressBarColor(percentage)}" style="width:${percentage}%"></div>
-                  </div>
-                  <span class="text-sm font-medium text-gray-700">${percentage}%</span>
-                </div>
-                <span class="text-sm text-gray-600">${completed} / ${total} tasks</span>
-              </div>
-            </div>
-          </div>
-          ${isExpanded ? `
-            <div class="divide-y divide-gray-200">
-              ${tasks.map(task => `
-                <div class="p-4 hover:bg-gray-50 transition-colors">
-                  <div class="flex items-start justify-between">
-                    <div class="flex-1">
-                      ${task['SUBSECTION TASK'] && task['SUBSECTION TASK'].trim() !== '' ? `
-                        <div class="font-medium text-gray-900 mb-2">${task['SUBSECTION TASK']}</div>
-                      ` : ''}
-                      <div class="flex flex-wrap gap-2">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getItemStatusColor(task.STATUS)}">
-                          ${task.STATUS}
-                        </span>
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${this.getImpactColor(task['MIGRATION IMPACT'])}">
-                          ${task['MIGRATION IMPACT']}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          ` : ''}
-        </div>
-      `;
-    }
-  });
+        const statusEl = document.getElementById("status");
+        const errorEl  = document.getElementById("error");
+        const tableEl  = document.getElementById("table");
 
-  html += `</div>`;
-  return html;
-},
-/* ... keep everything below as-is ... */
-</script>
+        const showError = (msg) => {
+          statusEl.classList.add("hidden");
+          errorEl.textContent = msg;
+          errorEl.classList.remove("hidden");
+        };
+
+        try {
+          const res = await fetch(encodeURI("./" + CSV_FILE), { cache: "no-store" });
+          if (!res.ok) {
+            showError(`Could not fetch "${CSV_FILE}" (HTTP ${res.status}). Check the filename and location.`);
+            return;
+          }
+          const csvText = await res.text();
+
+          Papa.parse(csvText, {
+            header: true, skipEmptyLines: true,
+            complete: ({ data }) => {
+              statusEl.classList.add("hidden");
+              if (!data.length) return showError("CSV parsed but has no rows.");
+
+              const cols = Object.keys(data[0]);
+              let html = '<table class="min-w-full text-sm">';
+              html += "<thead><tr>";
+              cols.forEach(c => html += `<th class="text-left px-3 py-2 bg-gray-100 border-b font-semibold">${c}</th>`);
+              html += "</tr></thead><tbody>";
+              data.forEach(row => {
+                html += "<tr>";
+                cols.forEach(c => html += `<td class="px-3 py-2 border-b align-top">${(row[c] ?? "")}</td>`);
+                html += "</tr>";
+              });
+              html += "</tbody></table>";
+
+              tableEl.innerHTML = html;
+              tableEl.classList.remove("hidden");
+            },
+            error: (err) => showError("CSV parse error: " + err.message)
+          });
+        } catch (e) {
+          showError("Unexpected error: " + (e?.message || e));
+        }
+      })();
+    </script>
+  </body>
+</html>
